@@ -46,7 +46,8 @@ class IconThemer(
     private val context: Context,
     private val packName: String,
     private val shape: IconShape,
-    private val fit: Boolean = true
+    private val fit: Boolean = true,
+    private val iconDp: Int = 56
 ) {
     private class Art(val bmp: Bitmap, val adaptive: Boolean)
     private class Info(val coverage: Float, val luminance: Float, val fill: Float, val bounds: Rect?)
@@ -55,7 +56,7 @@ class IconThemer(
     private class Trimmed(val bmp: Bitmap, val tile: Boolean, val edge: Int, val lum: Float)
 
     private val res = context.resources
-    private val size = (56 * res.displayMetrics.density).toInt().coerceIn(96, 256)
+    private val size = (iconDp * res.displayMetrics.density).toInt().coerceIn(96, 256)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val dstIn = Paint(Paint.ANTI_ALIAS_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN) }
     private val dstOut = Paint(Paint.ANTI_ALIAS_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT) }

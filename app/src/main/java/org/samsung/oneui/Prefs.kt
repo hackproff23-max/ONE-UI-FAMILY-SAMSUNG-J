@@ -20,6 +20,20 @@ class Prefs(context: Context) {
     fun fitIcons(): Boolean = sp.getBoolean("fit_icons", true)
     fun setFitIcons(v: Boolean) = sp.edit().putBoolean("fit_icons", v).apply()
 
+    /** Tamanho dos icones em dp. */
+    fun iconSize(): Int = sp.getInt("icon_size", ICON_DEF).coerceIn(ICON_MIN, ICON_MAX)
+    fun setIconSize(v: Int) = sp.edit().putInt("icon_size", v).apply()
+
+    /** Grade de uma lista de apps: target = "drawer" (gaveta) ou "home" (tela inicial). */
+    fun grid(target: String): GridCfg = GridCfg(
+        GridStyle.fromId(sp.getString("${target}_style", null)),
+        sp.getInt("${target}_cols", 0).coerceIn(0, 15),
+        sp.getInt("${target}_rows", 0).coerceIn(0, 15)
+    )
+    fun setGridStyle(target: String, s: GridStyle) = sp.edit().putString("${target}_style", s.id).apply()
+    fun setGridCols(target: String, v: Int) = sp.edit().putInt("${target}_cols", v).apply()
+    fun setGridRows(target: String, v: Int) = sp.edit().putInt("${target}_rows", v).apply()
+
     private fun read(key: String): MutableList<String> {
         val s = sp.getString(key, "") ?: ""
         return if (s.isEmpty()) mutableListOf() else s.split("\n").toMutableList()
@@ -32,5 +46,8 @@ class Prefs(context: Context) {
     companion object {
         const val DOCK_MAX = 5
         const val HOME_MAX = 16
+        const val ICON_MIN = 32
+        const val ICON_MAX = 96
+        const val ICON_DEF = 56
     }
 }

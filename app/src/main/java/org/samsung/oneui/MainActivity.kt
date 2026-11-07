@@ -12,11 +12,13 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.format.DateFormat
+import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
+import android.widget.SeekBar
 import android.widget.TextClock
 import android.widget.TextView
 import android.widget.Toast
@@ -38,6 +40,8 @@ class MainActivity : Activity() {
     private lateinit var drawer: View
     private lateinit var drawerList: RecyclerView
     private lateinit var drawerAdapter: AppAdapter
+    private lateinit var homeCtl: GridController
+    private lateinit var drawerCtl: GridController
 
     private var allApps: List<AppInfo> = emptyList()
     private var byKey: Map<String, AppInfo> = emptyMap()
@@ -151,17 +155,31 @@ class MainActivity : Activity() {
     private fun setupLists() {
         homeAdapter = AppAdapter({ launch(it) }, { app, v -> showAppMenu(v, app, Source.HOME) })
         val homeGrid = findViewById<RecyclerView>(R.id.homeGrid)
-        homeGrid.layoutManager = object : GridLayoutManager(this@MainActivity, 4) {
-            override fun canScrollVertically(): Boolean = false
-        }
         homeGrid.adapter = homeAdapter
         homeGrid.overScrollMode = View.OVER_SCROLL_NEVER
 
         drawerAdapter = AppAdapter({ launch(it) }, { app, v -> showAppMenu(v, app, Source.DRAWER) })
-        val span = (resources.displayMetrics.widthPixels / dp(84)).coerceIn(4, 8)
-        drawerList.layoutManager = GridLayoutManager(this, span)
         drawerList.adapter = drawerAdapter
         drawerList.setHasFixedSize(true)
+
+        val span = (resources.displayMetrics.widthPixels / dp(84)).coerceIn(4, 8)
+        homeCtl = GridController(homeGrid, homeAdapter, 4, true)
+        drawerCtl = GridController(drawerList, drawerAdapter, span, false)
+        applyGrids()
+    }
+
+    private fun applyGrids() {
+        homeCtl.apply(prefs.grid("home"), prefs.iconSize())
+        drawerCtl.apply(prefs.grid("drawer"), prefs.iconSize())
+    }
+
+    /** Quantos apps cabem na tela inicial: colunas x linhas quando as linhas foram escolhidas. */
+    private fun homeMax(): Int {
+        val g = prefs.grid("home")
+        if (g.rows > 0 && g.style != GridStyle.LIST) {
+            return maxOf(1, (if (g.cols > 0) g.cols else 4) * g.rows)
+        }
+        return Prefs.HOME_MAX
     }
 
     private fun setupDrawer() {
@@ -203,7 +221,7 @@ class MainActivity : Activity() {
     private fun loadApps(force: Boolean) {
         val cache: Map<String, AppInfo> = if (force) emptyMap() else byKey
         worker.execute {
-            val themer = IconThemer(this, prefs.iconPack(), prefs.iconShape(), prefs.fitIcons())
+            val themer = IconThemer(this, prefs.iconPack(), prefs.iconShape(), prefs.fitIcons(), prefs.iconSize())
             val apps = AppRepository.load(this, cache, themer)
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
@@ -241,14 +259,19 @@ class MainActivity : Activity() {
         dock.visibility = if (apps.isEmpty()) View.GONE else View.VISIBLE
         for (app in apps) {
             val v = layoutInflater.inflate(R.layout.item_app, dock, false)
-            v.findViewById<ImageView>(R.id.icon).setImageDrawable(app.newIcon())
+            val iconView = v.findViewById<ImageView>(R.id.icon)
+            val ip = iconView.layoutParams
+            ip.width = dp(prefs.iconSize())
+            ip.height = dp(prefs.iconSize())
+            iconView.layoutParams = ip
+            iconView.setImageDrawable(app.newIcon())
             v.findViewById<TextView>(R.id.label).visibility = View.GONE
             v.setOnClickListener { launch(app) }
             v.setOnLongClickListener {
                 showAppMenu(it, app, Source.DOCK)
                 true
             }
-            v.layoutParams = LinearLayout.LayoutParams(dp(68), LinearLayout.LayoutParams.WRAP_CONTENT)
+            v.layoutParams = LinearLayout.LayoutParams(dp(maxOf(68, prefs.iconSize() + 12)), LinearLayout.LayoutParams.WRAP_CONTENT)
             dock.addView(v)
         }
     }
@@ -308,12 +331,26 @@ class MainActivity : Activity() {
     // ---------- opcoes (tres pontinhos na gaveta ou segurar na tela inicial) ----------
 
     private fun showSettings() {
+        AlertDialog.Builder(this)
+            .setTitle("Opções")
+            .setItems(arrayOf("Ícones", "Grade")) { _, which ->
+                if (which == 0) showIconSettings() else showGridSettings()
+            }
+            .show()
+    }
+
+    // ----- Ícones -----
+
+    private fun showIconSettings() {
         val hasMask = ShapeMask.exists(this)
         val labels = ArrayList<String>()
         val actions = ArrayList<() -> Unit>()
 
         labels.add("Pacote de ícones: ${currentPackLabel()}")
         actions.add { chooseIconPack() }
+
+        labels.add("Tamanho dos ícones: ${prefs.iconSize()} dp")
+        actions.add { chooseIconSize() }
 
         labels.add("Ajustar ícones (sem fundo branco): ${if (prefs.fitIcons()) "ligado" else "desligado"}")
         actions.add {
@@ -338,6 +375,107 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Ícones")
             .setItems(labels.toTypedArray()) { _, which -> actions[which]() }
+            .setNegativeButton("Voltar") { _, _ -> showSettings() }
+            .show()
+    }
+
+    private fun chooseIconSize() {
+        val cur = prefs.iconSize()
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(16), dp(24), 0)
+        }
+        val value = TextView(this).apply {
+            text = "$cur dp"
+            textSize = 18f
+            gravity = Gravity.CENTER
+        }
+        val bar = SeekBar(this).apply {
+            max = Prefs.ICON_MAX - Prefs.ICON_MIN
+            progress = cur - Prefs.ICON_MIN
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
+                    value.text = "${p + Prefs.ICON_MIN} dp"
+                }
+
+                override fun onStartTrackingTouch(sb: SeekBar?) {}
+                override fun onStopTrackingTouch(sb: SeekBar?) {}
+            })
+        }
+        box.addView(value)
+        box.addView(bar)
+        AlertDialog.Builder(this)
+            .setTitle("Tamanho dos ícones")
+            .setView(box)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                prefs.setIconSize(bar.progress + Prefs.ICON_MIN)
+                reapplyIcons()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    // ----- Grade -----
+
+    private fun showGridSettings() {
+        AlertDialog.Builder(this)
+            .setTitle("Grade")
+            .setItems(arrayOf("Gaveta de apps", "Tela inicial")) { _, which ->
+                if (which == 0) showGridTarget("drawer", "Gaveta de apps")
+                else showGridTarget("home", "Tela inicial")
+            }
+            .setNegativeButton("Voltar") { _, _ -> showSettings() }
+            .show()
+    }
+
+    private fun numLabel(n: Int): String = if (n == 0) "automático" else n.toString()
+
+    private fun showGridTarget(target: String, title: String) {
+        val g = prefs.grid(target)
+        val labels = arrayOf(
+            "Estilo: ${g.style.label}",
+            "Colunas: ${numLabel(g.cols)}",
+            "Linhas: ${numLabel(g.rows)}"
+        )
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setItems(labels) { _, which ->
+                when (which) {
+                    0 -> chooseGridStyle(target, title)
+                    1 -> chooseGridNumber(target, title, "Colunas", g.cols) { prefs.setGridCols(target, it) }
+                    else -> chooseGridNumber(target, title, "Linhas", g.rows) { prefs.setGridRows(target, it) }
+                }
+            }
+            .setNegativeButton("Voltar") { _, _ -> showGridSettings() }
+            .show()
+    }
+
+    private fun chooseGridStyle(target: String, title: String) {
+        val styles = GridStyle.values()
+        val names = styles.map { it.label }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Estilo")
+            .setSingleChoiceItems(names, prefs.grid(target).style.ordinal) { dialog, which ->
+                prefs.setGridStyle(target, styles[which])
+                dialog.dismiss()
+                applyGrids()
+                showGridTarget(target, title)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun chooseGridNumber(target: String, title: String, what: String, current: Int, save: (Int) -> Unit) {
+        val names = Array(16) { if (it == 0) "Automático" else it.toString() }
+        AlertDialog.Builder(this)
+            .setTitle(what)
+            .setSingleChoiceItems(names, current.coerceIn(0, 15)) { dialog, which ->
+                save(which)
+                dialog.dismiss()
+                applyGrids()
+                showGridTarget(target, title)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
 
@@ -399,12 +537,13 @@ class MainActivity : Activity() {
 
     private fun reapplyIcons() {
         toast("Aplicando ícones…")
+        applyGrids()
         loadApps(force = true)
     }
 
     private fun pin(app: AppInfo, home: Boolean) {
         val list = if (home) prefs.home() else prefs.dock()
-        val max = if (home) Prefs.HOME_MAX else Prefs.DOCK_MAX
+        val max = if (home) homeMax() else Prefs.DOCK_MAX
         if (list.size >= max) {
             toast(if (home) "Tela inicial cheia" else "Dock cheio")
             return
