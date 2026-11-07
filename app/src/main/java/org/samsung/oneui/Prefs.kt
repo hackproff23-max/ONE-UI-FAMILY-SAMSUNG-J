@@ -24,6 +24,10 @@ class Prefs(context: Context) {
     fun iconSize(): Int = sp.getInt("icon_size", ICON_DEF).coerceIn(ICON_MIN, ICON_MAX)
     fun setIconSize(v: Int) = sp.edit().putInt("icon_size", v).apply()
 
+    /** Intensidade do borrado das bordas da forma dos icones, 0 a 100. */
+    fun maskBlur(): Int = sp.getInt("mask_blur", 0).coerceIn(0, 100)
+    fun setMaskBlur(v: Int) = sp.edit().putInt("mask_blur", v).apply()
+
     /** Grade de uma lista de apps: target = "drawer" (gaveta) ou "home" (tela inicial). */
     fun grid(target: String): GridCfg = GridCfg(
         GridStyle.fromId(sp.getString("${target}_style", null)),

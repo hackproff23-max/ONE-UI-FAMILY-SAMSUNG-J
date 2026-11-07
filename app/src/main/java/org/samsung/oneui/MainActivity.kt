@@ -221,7 +221,7 @@ class MainActivity : Activity() {
     private fun loadApps(force: Boolean) {
         val cache: Map<String, AppInfo> = if (force) emptyMap() else byKey
         worker.execute {
-            val themer = IconThemer(this, prefs.iconPack(), prefs.iconShape(), prefs.fitIcons(), prefs.iconSize())
+            val themer = IconThemer(this, prefs.iconPack(), prefs.iconShape(), prefs.fitIcons(), prefs.iconSize(), prefs.maskBlur())
             val apps = AppRepository.load(this, cache, themer)
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
@@ -369,6 +369,9 @@ class MainActivity : Activity() {
             }
         }
 
+        labels.add("Borrar bordas da forma: ${prefs.maskBlur()}")
+        actions.add { chooseMaskBlur() }
+
         labels.add("Formato dos ícones sem tema: ${prefs.iconShape().label}")
         actions.add { chooseShape() }
 
@@ -409,6 +412,42 @@ class MainActivity : Activity() {
             .setView(box)
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 prefs.setIconSize(bar.progress + Prefs.ICON_MIN)
+                reapplyIcons()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun chooseMaskBlur() {
+        val cur = prefs.maskBlur()
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(16), dp(24), 0)
+        }
+        val value = TextView(this).apply {
+            text = "$cur"
+            textSize = 18f
+            gravity = Gravity.CENTER
+        }
+        val bar = SeekBar(this).apply {
+            max = 100
+            progress = cur
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
+                    value.text = "$p"
+                }
+
+                override fun onStartTrackingTouch(sb: SeekBar?) {}
+                override fun onStopTrackingTouch(sb: SeekBar?) {}
+            })
+        }
+        box.addView(value)
+        box.addView(bar)
+        AlertDialog.Builder(this)
+            .setTitle("Borrar bordas da forma (0 a 100)")
+            .setView(box)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                prefs.setMaskBlur(bar.progress)
                 reapplyIcons()
             }
             .setNegativeButton(android.R.string.cancel, null)

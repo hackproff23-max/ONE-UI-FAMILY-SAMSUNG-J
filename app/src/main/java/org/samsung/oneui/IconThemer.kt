@@ -47,7 +47,8 @@ class IconThemer(
     private val packName: String,
     private val shape: IconShape,
     private val fit: Boolean = true,
-    private val iconDp: Int = 56
+    private val iconDp: Int = 56,
+    private val maskBlur: Int = 0
 ) {
     private class Art(val bmp: Bitmap, val adaptive: Boolean)
     private class Info(val coverage: Float, val luminance: Float, val fill: Float, val bounds: Rect?)
@@ -87,12 +88,51 @@ class IconThemer(
 
     /** Mascara final (alfa 255 dentro, 0 fora): a forma importada ou a forma escolhida. */
     private val clipMask: Bitmap by lazy {
-        customMask ?: run {
+        val base = customMask ?: run {
             val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
             val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
             Canvas(bmp).drawPath(shapePath(resolvedShape, size), p)
             bmp
         }
+        blurMask(base)
+    }
+
+    /** Borra as bordas da forma (maskBlur 0..100): a transicao dentro/fora fica suave. */
+    private fun blurMask(m: Bitmap): Bitmap {
+        val n = m.width
+        val r = (maskBlur / 100f * n * 0.12f).toInt()
+        if (r < 1 || m.height != n) return m
+        val px = IntArray(n * n)
+        m.getPixels(px, 0, n, 0, 0, n, n)
+        var a = IntArray(n * n) { px[it] ushr 24 }
+        repeat(3) {
+            a = blurPass(a, n, r, true)
+            a = blurPass(a, n, r, false)
+        }
+        for (i in px.indices) px[i] = (a[i] shl 24) or 0x00FFFFFF
+        val out = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
+        out.setPixels(px, 0, n, 0, 0, n, n)
+        return out
+    }
+
+    private fun blurPass(src: IntArray, n: Int, r: Int, horizontal: Boolean): IntArray {
+        val out = IntArray(n * n)
+        val win = 2 * r + 1
+        for (line in 0 until n) {
+            var sum = 0
+            for (k in -r..r) {
+                val pos = k.coerceIn(0, n - 1)
+                sum += src[if (horizontal) line * n + pos else pos * n + line]
+            }
+            for (i in 0 until n) {
+                out[if (horizontal) line * n + i else i * n + line] = sum / win
+                val add = (i + r + 1).coerceAtMost(n - 1)
+                val sub = (i - r).coerceAtLeast(0)
+                sum += src[if (horizontal) line * n + add else add * n + line] -
+                    src[if (horizontal) line * n + sub else sub * n + line]
+            }
+        }
+        return out
     }
 
     fun apply(cn: ComponentName, original: Drawable): Drawable {
