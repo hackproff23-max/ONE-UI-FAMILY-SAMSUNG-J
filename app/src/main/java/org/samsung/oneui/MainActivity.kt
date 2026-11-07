@@ -328,14 +328,29 @@ class MainActivity : Activity() {
         popup.show()
     }
 
-    // ---------- opcoes (tres pontinhos na gaveta ou segurar na tela inicial) ----------
+    // ---------- menu circular (tres pontinhos na gaveta ou segurar na tela inicial) ----------
 
     private fun showSettings() {
+        HomeMenu.show(
+            this,
+            listOf(
+                HomeMenu.Item(HomeMenu.ICONS, "ICONS") { showIconSettings() },
+                HomeMenu.Item(HomeMenu.CONFIGS, "CONFIGS") { showClassicSettings() },
+                HomeMenu.Item(HomeMenu.PAGINA, "PÁGINA") { showGridTarget("home", "Tela inicial") },
+                HomeMenu.Item(HomeMenu.WIDGET, "WIDGET") { toast("Widgets: em breve") },
+                HomeMenu.Item(HomeMenu.RELOGIO, "RELÓGIO") { toast("Relógio: em breve") },
+                HomeMenu.Item(HomeMenu.DOCK, "DOCK") { toast("Dock: em breve") }
+            )
+        )
+    }
+
+    private fun showClassicSettings() {
         AlertDialog.Builder(this)
             .setTitle("Opções")
             .setItems(arrayOf("Ícones", "Grade")) { _, which ->
                 if (which == 0) showIconSettings() else showGridSettings()
             }
+            .setNegativeButton("Voltar") { _, _ -> showSettings() }
             .show()
     }
 
@@ -485,7 +500,7 @@ class MainActivity : Activity() {
                     else -> chooseGridNumber(target, title, "Linhas", g.rows) { prefs.setGridRows(target, it) }
                 }
             }
-            .setNegativeButton("Voltar") { _, _ -> showGridSettings() }
+            .setNegativeButton("Voltar") { _, _ -> showSettings() }
             .show()
     }
 
