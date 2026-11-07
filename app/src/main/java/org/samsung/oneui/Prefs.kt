@@ -11,6 +11,11 @@ class Prefs(context: Context) {
     fun setHome(list: List<String>) = write("home", list)
     fun setDock(list: List<String>) = write("dock", list)
 
+    fun iconPack(): String = sp.getString("icon_pack", "") ?: ""
+    fun setIconPack(pkg: String) = sp.edit().putString("icon_pack", pkg).apply()
+    fun iconShape(): IconShape = IconShape.fromId(sp.getString("icon_shape", null))
+    fun setIconShape(s: IconShape) = sp.edit().putString("icon_shape", s.id).apply()
+
     private fun read(key: String): MutableList<String> {
         val s = sp.getString(key, "") ?: ""
         return if (s.isEmpty()) mutableListOf() else s.split("\n").toMutableList()

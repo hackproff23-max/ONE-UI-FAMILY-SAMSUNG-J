@@ -1,6 +1,7 @@
 package org.samsung.oneui
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -168,6 +169,10 @@ class MainActivity : Activity() {
             drawerList.scrollToPosition(0)
         }
         findViewById<View>(R.id.handle).setOnClickListener { root.openDrawer() }
+        home.setOnLongClickListener {
+            showSettings()
+            true
+        }
 
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -215,7 +220,8 @@ class MainActivity : Activity() {
     private fun loadApps(force: Boolean) {
         val cache: Map<String, AppInfo> = if (force) emptyMap() else byKey
         worker.execute {
-            val apps = AppRepository.load(this, cache)
+            val themer = IconThemer(this, prefs.iconPack(), prefs.iconShape())
+            val apps = AppRepository.load(this, cache, themer)
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 if (!force && apps.map { it.key } == allApps.map { it.key }) return@runOnUiThread
@@ -320,6 +326,73 @@ class MainActivity : Activity() {
             true
         }
         popup.show()
+    }
+
+    // ---------- configuracoes (segurar na tela inicial) ----------
+
+    private fun showSettings() {
+        val items = arrayOf(
+            "Pacote de ícones: ${currentPackLabel()}",
+            "Formato dos ícones sem tema: ${prefs.iconShape().label}"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("ONE UI")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> chooseIconPack()
+                    1 -> chooseShape()
+                }
+            }
+            .show()
+    }
+
+    private fun currentPackLabel(): String {
+        val current = prefs.iconPack()
+        if (current.isEmpty()) return "Padrão do sistema"
+        return IconPackLoader.list(this).firstOrNull { it.packageName == current }?.label ?: "Padrão do sistema"
+    }
+
+    private fun chooseIconPack() {
+        val packs = IconPackLoader.list(this)
+        if (packs.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("Pacote de ícones")
+                .setMessage("Nenhum pacote de ícones instalado. Instale um pacote compatível (formato ADW, Nova ou Apex) e volte aqui.")
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+            return
+        }
+        val names = (listOf("Padrão do sistema") + packs.map { it.label }).toTypedArray()
+        val current = prefs.iconPack()
+        val selected = packs.indexOfFirst { it.packageName == current } + 1 // -1 vira 0 (sistema)
+        AlertDialog.Builder(this)
+            .setTitle("Pacote de ícones")
+            .setSingleChoiceItems(names, selected) { dialog, which ->
+                prefs.setIconPack(if (which == 0) "" else packs[which - 1].packageName)
+                dialog.dismiss()
+                reapplyIcons()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun chooseShape() {
+        val shapes = IconShape.values()
+        val names = shapes.map { it.label }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Formato dos ícones sem tema")
+            .setSingleChoiceItems(names, prefs.iconShape().ordinal) { dialog, which ->
+                prefs.setIconShape(shapes[which])
+                dialog.dismiss()
+                reapplyIcons()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun reapplyIcons() {
+        toast("Aplicando ícones…")
+        loadApps(force = true)
     }
 
     private fun pin(app: AppInfo, home: Boolean) {

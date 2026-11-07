@@ -2,5 +2,5 @@
 <resources>
     <string name="app_name">ONE UI</string>
     <string name="search_hint">Buscar apps</string>
-    <string name="home_hint">Deslize para cima para abrir seus apps.\nSegure um app para fixá-lo aqui.</string>
+    <string name="home_hint">Deslize para cima para abrir seus apps.\nSegure um app para fixá-lo aqui.\nSegure em um espaço vazio para configurar os ícones.</string>
 </resources>

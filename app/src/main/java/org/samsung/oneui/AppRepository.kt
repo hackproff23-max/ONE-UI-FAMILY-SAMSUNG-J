@@ -6,7 +6,7 @@ import android.content.Intent
 
 object AppRepository {
     /** Lista os apps com icone de launcher. Reaproveita itens do [cache] para nao recarregar icones. */
-    fun load(context: Context, cache: Map<String, AppInfo>): List<AppInfo> {
+    fun load(context: Context, cache: Map<String, AppInfo>, themer: IconThemer): List<AppInfo> {
         val pm = context.packageManager
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         @Suppress("DEPRECATION")
@@ -17,7 +17,7 @@ object AppRepository {
             if (ai.packageName == context.packageName) continue
             val cn = ComponentName(ai.packageName, ai.name)
             val cached = cache[cn.flattenToString()]
-            result.add(cached ?: AppInfo(ri.loadLabel(pm).toString(), cn, ri.loadIcon(pm)))
+            result.add(cached ?: AppInfo(ri.loadLabel(pm).toString(), cn, themer.apply(cn, ri.loadIcon(pm))))
         }
         result.sortBy { it.label.lowercase() }
         return result
