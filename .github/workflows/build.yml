@@ -18,6 +18,9 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Restaurar chave de assinatura fixa
+        run: base64 -d keystore/oneui.jks.b64 > keystore/oneui.jks
+
       - name: Build debug APK
         run: |
           chmod +x gradlew

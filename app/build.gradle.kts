@@ -15,9 +15,23 @@ android {
         versionName = "1.0"
     }
 
+    // Chave fixa: todo APK gerado tem a mesma assinatura, entao da pra instalar por cima sem desinstalar.
+    signingConfigs {
+        create("fixed") {
+            storeFile = rootProject.file("keystore/oneui.jks")
+            storePassword = "oneui123"
+            keyAlias = "oneui"
+            keyPassword = "oneui123"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("fixed")
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("fixed")
         }
     }
 
