@@ -16,6 +16,10 @@ class Prefs(context: Context) {
     fun iconShape(): IconShape = IconShape.fromId(sp.getString("icon_shape", null))
     fun setIconShape(s: IconShape) = sp.edit().putString("icon_shape", s.id).apply()
 
+    /** Ajustar icones: tira o fundo branco e redesenha na forma. */
+    fun fitIcons(): Boolean = sp.getBoolean("fit_icons", true)
+    fun setFitIcons(v: Boolean) = sp.edit().putBoolean("fit_icons", v).apply()
+
     private fun read(key: String): MutableList<String> {
         val s = sp.getString(key, "") ?: ""
         return if (s.isEmpty()) mutableListOf() else s.split("\n").toMutableList()

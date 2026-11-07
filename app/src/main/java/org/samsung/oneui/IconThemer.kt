@@ -36,16 +36,23 @@ enum class IconShape(val id: String, val label: String) {
 
 /**
  * Aplica o pacote de icones. Apps que o pacote nao cobre sao redesenhados no formato dos outros:
- * com iconback/iconmask/iconupon do pacote quando ele define, ou no formato detectado nos icones
- * do pacote (circulo, squircle ou quadrado arredondado).
+ * com iconback/iconmask/iconupon do pacote quando ele define, ou na forma importada (PNG), ou no
+ * formato detectado nos icones do pacote (circulo, squircle ou quadrado arredondado).
+ *
+ * Com [fit] ligado, icones antigos com fundo branco (ou transparente) tem o fundo removido e o
+ * conteudo e recortado e redesenhado preenchendo a forma.
  */
 class IconThemer(
     private val context: Context,
     private val packName: String,
-    private val shape: IconShape
+    private val shape: IconShape,
+    private val fit: Boolean = true
 ) {
     private class Art(val bmp: Bitmap, val adaptive: Boolean)
     private class Info(val coverage: Float, val luminance: Float, val fill: Float, val bounds: Rect?)
+
+    /** Conteudo do icone ja sem o fundo, recortado. [tile] = preenche o quadro (nao e so um simbolo). */
+    private class Trimmed(val bmp: Bitmap, val tile: Boolean, val edge: Int, val lum: Float)
 
     private val res = context.resources
     private val size = (56 * res.displayMetrics.density).toInt().coerceIn(96, 256)
@@ -59,9 +66,13 @@ class IconThemer(
         if (packName.isEmpty()) null else IconPackLoader.load(context, packName)
     }
 
-    /** Sem pacote e sem formato escolhido, os icones ficam como o sistema entrega. */
+    /** Forma importada pelo usuario (PNG), se houver. */
+    private val customMask: Bitmap? by lazy { ShapeMask.load(context, size) }
+
+    /** Sem pacote, sem forma e sem ajuste, os icones ficam como o sistema entrega. */
     private val active: Boolean by lazy {
-        pack != null || (shape != IconShape.AUTO && shape != IconShape.ORIGINAL)
+        pack != null || customMask != null || fit ||
+            (shape != IconShape.AUTO && shape != IconShape.ORIGINAL)
     }
 
     private val resolvedShape: IconShape by lazy {
@@ -70,6 +81,16 @@ class IconThemer(
             shape == IconShape.CIRCLE || shape == IconShape.SQUIRCLE || shape == IconShape.ROUNDED -> shape
             p != null -> inferShape(p)
             else -> IconShape.SQUIRCLE
+        }
+    }
+
+    /** Mascara final (alfa 255 dentro, 0 fora): a forma importada ou a forma escolhida. */
+    private val clipMask: Bitmap by lazy {
+        customMask ?: run {
+            val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+            Canvas(bmp).drawPath(shapePath(resolvedShape, size), p)
+            bmp
         }
     }
 
@@ -96,11 +117,15 @@ class IconThemer(
 
     // ---------- composicao ----------
 
+    private fun clipToShape(c: Canvas) {
+        c.drawBitmap(clipMask, 0f, 0f, dstIn)
+    }
+
     private fun composeWithShape(art: Art): Bitmap {
         val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
         drawArt(c, art, null, true)
-        c.drawPath(shapePath(resolvedShape, size), dstIn)
+        clipToShape(c)
         return out
     }
 
@@ -117,7 +142,7 @@ class IconThemer(
         if (mask != null && maskName != null) {
             lc.drawBitmap(mask, 0f, 0f, if (maskKeeps(maskName, mask)) dstIn else dstOut)
         } else if (art.adaptive) {
-            lc.drawPath(shapePath(resolvedShape, size), dstIn)
+            clipToShape(lc)
         }
         canvas.drawBitmap(layer, 0f, 0f, paint)
 
@@ -126,14 +151,21 @@ class IconThemer(
     }
 
     /**
-     * Desenha o icone original. Adaptativo: camadas sem recorte, preenchendo tudo. Legado cheio
-     * (sem cantos transparentes): preenche. Legado com transparencia: vai sobre uma base clara/escura,
-     * com o desenho centralizado e do mesmo tamanho nos outros icones.
+     * Desenha o icone original. Adaptativo: camadas sem recorte, preenchendo tudo. Legado com fundo
+     * (branco/transparente) e [fit] ligado: tira o fundo, recorta e redesenha. Senao: preenche se
+     * for cheio, ou vai sobre uma base com o desenho centralizado.
      */
     private fun drawArt(c: Canvas, art: Art, scaleFactor: Float?, plate: Boolean) {
         if (art.adaptive) {
             c.drawBitmap(art.bmp, 0f, 0f, paint)
             return
+        }
+        if (fit) {
+            val t = trim(art.bmp)
+            if (t != null) {
+                drawTrimmed(c, t, scaleFactor, plate)
+                return
+            }
         }
         val info = analyze(art.bmp)
         if (scaleFactor == null && info.coverage >= 0.80f) {
@@ -154,6 +186,184 @@ class IconThemer(
             val h = box.height() * k
             c.drawBitmap(art.bmp, box, RectF((size - w) / 2f, (size - h) / 2f, (size + w) / 2f, (size + h) / 2f), paint)
         }
+    }
+
+    private fun drawTrimmed(c: Canvas, t: Trimmed, scaleFactor: Float?, plate: Boolean) {
+        val bw = t.bmp.width.toFloat()
+        val bh = t.bmp.height.toFloat()
+        if (scaleFactor != null) {
+            // dentro de um pacote com base propria: cabe no tamanho do pacote
+            val k = size * scaleFactor / max(bw, bh)
+            val w = bw * k
+            val h = bh * k
+            c.drawBitmap(t.bmp, null, RectF((size - w) / 2f, (size - h) / 2f, (size + w) / 2f, (size + h) / 2f), paint)
+            return
+        }
+        if (t.tile) {
+            // quadro cheio: aumenta ate cobrir a forma inteira (recorta o que sobrar)
+            c.drawColor(t.edge)
+            val k = size / minOf(bw, bh) * 1.06f
+            val w = bw * k
+            val h = bh * k
+            c.drawBitmap(t.bmp, null, RectF((size - w) / 2f, (size - h) / 2f, (size + w) / 2f, (size + h) / 2f), paint)
+        } else {
+            // so um simbolo: sobre uma base escura/clara (nunca branca) e centralizado
+            if (plate) c.drawColor(if (t.lum > 0.55f) PLATE_DARK else PLATE_SOFT)
+            val k = size * 0.62f / max(bw, bh)
+            val w = bw * k
+            val h = bh * k
+            c.drawBitmap(t.bmp, null, RectF((size - w) / 2f, (size - h) / 2f, (size + w) / 2f, (size + h) / 2f), paint)
+        }
+    }
+
+    // ---------- remocao do fundo ----------
+
+    /**
+     * Remove o fundo ligado as bordas (branco ou transparente) e recorta o conteudo.
+     * Devolve null se o icone nao tem esse tipo de fundo (ai segue o desenho normal).
+     */
+    private fun trim(b: Bitmap): Trimmed? {
+        val w = b.width
+        val h = b.height
+        val px = IntArray(w * h)
+        b.getPixels(px, 0, w, 0, 0, w, h)
+
+        val ring = ArrayList<Int>()
+        for (x in 0 until w) {
+            ring.add(x)
+            ring.add((h - 1) * w + x)
+        }
+        for (y in 0 until h) {
+            ring.add(y * w)
+            ring.add(y * w + w - 1)
+        }
+
+        var transparent = 0
+        val counts = HashMap<Int, Int>()
+        val sample = HashMap<Int, Int>()
+        for (i in ring) {
+            val c = px[i]
+            if ((c ushr 24) < 24) {
+                transparent++
+                continue
+            }
+            val key = ((Color.red(c) shr 3) shl 10) or ((Color.green(c) shr 3) shl 5) or (Color.blue(c) shr 3)
+            counts[key] = (counts[key] ?: 0) + 1
+            if (!sample.containsKey(key)) sample[key] = c
+        }
+
+        val bgTransparent = transparent > ring.size / 2
+        var bgColor = 0
+        if (!bgTransparent) {
+            val top = counts.maxByOrNull { it.value } ?: return null
+            if (top.value < ring.size * 0.6f) return null
+            bgColor = sample[top.key] ?: return null
+            // so remove fundo claro (branco / cinza bem claro)
+            if (minOf(Color.red(bgColor), Color.green(bgColor), Color.blue(bgColor)) < 215) return null
+        }
+        val br = Color.red(bgColor)
+        val bgG = Color.green(bgColor)
+        val bb = Color.blue(bgColor)
+
+        fun isBg(c: Int): Boolean {
+            if ((c ushr 24) < 24) return true
+            if (bgTransparent) return false
+            return abs(Color.red(c) - br) + abs(Color.green(c) - bgG) + abs(Color.blue(c) - bb) <= 48
+        }
+
+        val gone = BooleanArray(w * h)
+        val stack = IntArray(w * h)
+        var sp = 0
+        for (i in ring) {
+            if (!gone[i] && isBg(px[i])) {
+                gone[i] = true
+                stack[sp++] = i
+            }
+        }
+        while (sp > 0) {
+            val i = stack[--sp]
+            val x = i % w
+            val y = i / w
+            if (x > 0) {
+                val n = i - 1
+                if (!gone[n] && isBg(px[n])) {
+                    gone[n] = true
+                    stack[sp++] = n
+                }
+            }
+            if (x < w - 1) {
+                val n = i + 1
+                if (!gone[n] && isBg(px[n])) {
+                    gone[n] = true
+                    stack[sp++] = n
+                }
+            }
+            if (y > 0) {
+                val n = i - w
+                if (!gone[n] && isBg(px[n])) {
+                    gone[n] = true
+                    stack[sp++] = n
+                }
+            }
+            if (y < h - 1) {
+                val n = i + w
+                if (!gone[n] && isBg(px[n])) {
+                    gone[n] = true
+                    stack[sp++] = n
+                }
+            }
+        }
+
+        var minX = w
+        var minY = h
+        var maxX = -1
+        var maxY = -1
+        var count = 0
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                val i = y * w + x
+                if (gone[i] || (px[i] ushr 24) < 24) continue
+                count++
+                if (x < minX) minX = x
+                if (x > maxX) maxX = x
+                if (y < minY) minY = y
+                if (y > maxY) maxY = y
+            }
+        }
+        if (maxX < 0 || count < w * h * 0.02f) return null
+
+        val bw = maxX - minX + 1
+        val bh = maxY - minY + 1
+        val out = IntArray(bw * bh)
+        var er = 0L
+        var eg = 0L
+        var eb = 0L
+        var en = 0
+        var lum = 0.0
+        var ln = 0
+        for (y in 0 until bh) {
+            for (x in 0 until bw) {
+                val i = (y + minY) * w + (x + minX)
+                val c = if (gone[i]) 0 else px[i]
+                out[y * bw + x] = c
+                val a = c ushr 24
+                if (a > 128) {
+                    lum += (0.299 * Color.red(c) + 0.587 * Color.green(c) + 0.114 * Color.blue(c)) / 255.0
+                    ln++
+                }
+                if (a > 200 && (x < 2 || y < 2 || x >= bw - 2 || y >= bh - 2)) {
+                    er += Color.red(c)
+                    eg += Color.green(c)
+                    eb += Color.blue(c)
+                    en++
+                }
+            }
+        }
+        val bmp = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888)
+        bmp.setPixels(out, 0, bw, 0, 0, bw, bh)
+        val edge = if (en > 0) Color.rgb((er / en).toInt(), (eg / en).toInt(), (eb / en).toInt()) else PLATE_DARK
+        val tile = count.toFloat() / (bw * bh) >= 0.72f
+        return Trimmed(bmp, tile, edge, if (ln > 0) (lum / ln).toFloat() else 0f)
     }
 
     // ---------- utilitarios ----------
@@ -283,6 +493,7 @@ class IconThemer(
 
     private companion object {
         const val PLATE_LIGHT = 0xFFF5F5F7.toInt()
+        const val PLATE_SOFT = 0xFFE4E6EB.toInt()
         const val PLATE_DARK = 0xFF2B2D31.toInt()
     }
 }

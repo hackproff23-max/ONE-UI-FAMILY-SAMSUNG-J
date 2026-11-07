@@ -11,15 +11,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.text.Editable
-import android.text.TextWatcher
 import android.text.format.DateFormat
-import android.view.KeyEvent
 import android.view.View
 import android.view.WindowInsets
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
-import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
@@ -42,7 +36,6 @@ class MainActivity : Activity() {
     private lateinit var homeHint: TextView
     private lateinit var homeAdapter: AppAdapter
     private lateinit var drawer: View
-    private lateinit var search: EditText
     private lateinit var drawerList: RecyclerView
     private lateinit var drawerAdapter: AppAdapter
 
@@ -105,6 +98,19 @@ class MainActivity : Activity() {
         if (root.isDrawerOpen) root.closeDrawer()
     }
 
+    @Suppress("OVERRIDE_DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_MASK || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        if (ShapeMask.save(this, uri)) {
+            toast("Forma importada")
+            reapplyIcons()
+        } else {
+            toast("Não foi possível ler a imagem")
+        }
+    }
+
     // ---------- configuracao ----------
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
@@ -129,7 +135,6 @@ class MainActivity : Activity() {
         dock = findViewById(R.id.dock)
         homeHint = findViewById(R.id.homeHint)
         drawer = findViewById(R.id.drawer)
-        search = findViewById(R.id.search)
         drawerList = findViewById(R.id.drawerList)
     }
 
@@ -163,34 +168,12 @@ class MainActivity : Activity() {
         root.drawerView = drawer
         root.homeView = home
         root.drawerScroller = drawerList
-        root.onStateChanged = { open -> if (!open) hideKeyboard() }
-        root.onClosed = {
-            search.setText("")
-            drawerList.scrollToPosition(0)
-        }
+        root.onClosed = { drawerList.scrollToPosition(0) }
         findViewById<View>(R.id.handle).setOnClickListener { root.openDrawer() }
+        findViewById<View>(R.id.menuBtn).setOnClickListener { showSettings() }
         home.setOnLongClickListener {
             showSettings()
             true
-        }
-
-        search.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                filterDrawer()
-            }
-
-            override fun afterTextChanged(s: Editable?) {}
-        })
-        search.setOnEditorActionListener { _, actionId, event ->
-            val enter = event != null && event.keyCode == KeyEvent.KEYCODE_ENTER &&
-                event.action == KeyEvent.ACTION_DOWN
-            if (actionId == EditorInfo.IME_ACTION_DONE || actionId == EditorInfo.IME_ACTION_SEARCH || enter) {
-                drawerAdapter.first()?.let { launch(it) }
-                true
-            } else {
-                false
-            }
         }
     }
 
@@ -220,7 +203,7 @@ class MainActivity : Activity() {
     private fun loadApps(force: Boolean) {
         val cache: Map<String, AppInfo> = if (force) emptyMap() else byKey
         worker.execute {
-            val themer = IconThemer(this, prefs.iconPack(), prefs.iconShape())
+            val themer = IconThemer(this, prefs.iconPack(), prefs.iconShape(), prefs.fitIcons())
             val apps = AppRepository.load(this, cache, themer)
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
@@ -228,7 +211,7 @@ class MainActivity : Activity() {
                 allApps = apps
                 byKey = apps.associateBy { it.key }
                 pruneMissing()
-                filterDrawer()
+                drawerAdapter.submit(allApps)
                 refreshHome()
             }
         }
@@ -243,12 +226,6 @@ class MainActivity : Activity() {
         val d2 = d.filter { it in byKey }
         if (h2.size != h.size) prefs.setHome(h2)
         if (d2.size != d.size) prefs.setDock(d2)
-    }
-
-    private fun filterDrawer() {
-        val q = search.text.toString().trim().lowercase()
-        val list = if (q.isEmpty()) allApps else allApps.filter { it.label.lowercase().contains(q) }
-        drawerAdapter.submit(list)
     }
 
     private fun refreshHome() {
@@ -328,22 +305,52 @@ class MainActivity : Activity() {
         popup.show()
     }
 
-    // ---------- configuracoes (segurar na tela inicial) ----------
+    // ---------- opcoes (tres pontinhos na gaveta ou segurar na tela inicial) ----------
 
     private fun showSettings() {
-        val items = arrayOf(
-            "Pacote de ícones: ${currentPackLabel()}",
-            "Formato dos ícones sem tema: ${prefs.iconShape().label}"
-        )
-        AlertDialog.Builder(this)
-            .setTitle("ONE UI")
-            .setItems(items) { _, which ->
-                when (which) {
-                    0 -> chooseIconPack()
-                    1 -> chooseShape()
-                }
+        val hasMask = ShapeMask.exists(this)
+        val labels = ArrayList<String>()
+        val actions = ArrayList<() -> Unit>()
+
+        labels.add("Pacote de ícones: ${currentPackLabel()}")
+        actions.add { chooseIconPack() }
+
+        labels.add("Ajustar ícones (sem fundo branco): ${if (prefs.fitIcons()) "ligado" else "desligado"}")
+        actions.add {
+            prefs.setFitIcons(!prefs.fitIcons())
+            reapplyIcons()
+        }
+
+        labels.add(if (hasMask) "Trocar forma importada (PNG)" else "Importar forma (PNG)")
+        actions.add { pickMask() }
+
+        if (hasMask) {
+            labels.add("Remover forma importada")
+            actions.add {
+                ShapeMask.delete(this)
+                reapplyIcons()
             }
+        }
+
+        labels.add("Formato dos ícones sem tema: ${prefs.iconShape().label}")
+        actions.add { chooseShape() }
+
+        AlertDialog.Builder(this)
+            .setTitle("Ícones")
+            .setItems(labels.toTypedArray()) { _, which -> actions[which]() }
             .show()
+    }
+
+    private fun pickMask() {
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("image/*")
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(i, REQ_MASK)
+        } catch (e: Exception) {
+            toast("Nenhum seletor de arquivos disponível")
+        }
     }
 
     private fun currentPackLabel(): String {
@@ -419,13 +426,6 @@ class MainActivity : Activity() {
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
-    private fun hideKeyboard() {
-        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.hideSoftInputFromWindow(search.windowToken, 0)
-        search.clearFocus()
-        root.requestFocus()
-    }
-
     private companion object {
         const val ID_PIN_HOME = 1
         const val ID_PIN_DOCK = 2
@@ -433,5 +433,6 @@ class MainActivity : Activity() {
         const val ID_UNPIN_DOCK = 4
         const val ID_INFO = 5
         const val ID_UNINSTALL = 6
+        const val REQ_MASK = 101
     }
 }
