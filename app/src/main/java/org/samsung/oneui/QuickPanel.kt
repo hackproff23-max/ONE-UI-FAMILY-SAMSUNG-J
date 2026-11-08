@@ -59,7 +59,7 @@ import kotlin.math.abs
 /** Cores e icones (viewport 24x24, estilo Material) da central de controle. */
 private object Qp {
     val BLUE = 0xFF0A78D6.toInt()
-    val OFF = 0xFF383838.toInt()
+    val OFF = 0xFFE4E4E4.toInt()
 
     const val DATA = "M16,17.01V10h-2v7.01h-3L15,21l4,-3.99h-3zM9,3L5,6.99h3V14h2V6.99h3L9,3z"
     const val WIFI = "M1,9l2,2c4.97,-4.97 13.03,-4.97 18,0l2,-2C16.93,2.93 7.08,2.93 1,9zM9,17l3,3 3,-3c-1.65,-1.66 -4.34,-1.66 -6,0zM5,13l2,2c2.76,-2.76 7.24,-2.76 10,0l2,-2C15.14,9.14 8.87,9.14 5,13z"
@@ -95,7 +95,7 @@ private class Tile(
     val hold: (() -> Unit)? = null
 )
 
-/** Botao redondo do painel: fundo azul quando ligado, cinza quando desligado. */
+/** Botao redondo do painel: fundo azul quando ligado, cinza claro quando desligado. */
 private class Circle(c: Context, iconPath: String) : View(c) {
     var on = false
         set(v) {
@@ -116,7 +116,7 @@ private class Circle(c: Context, iconPath: String) : View(c) {
         canvas.save()
         canvas.translate((w - size) / 2f, (h - size) / 2f)
         canvas.scale(s, s)
-        paint.color = 0xFFF2F2F2.toInt()
+        paint.color = if (on) Color.WHITE else 0xFF4A4A4A.toInt()
         canvas.drawPath(p, paint)
         canvas.restore()
     }
@@ -127,7 +127,7 @@ private class GearView(c: Context) : View(c) {
     private val path: Path? = Qp.parse(Qp.GEAR)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = Color.WHITE
+        color = 0xFF222222.toInt()
     }
 
     init {
@@ -145,7 +145,7 @@ private class GearView(c: Context) : View(c) {
     }
 }
 
-/** Barra de brilho: trilho escuro com preenchimento cinza claro e sol na ponta. */
+/** Barra de brilho: trilho cinza claro com preenchimento escuro e sol na ponta. */
 private class Slider(c: Context, private val onValue: (Float) -> Unit) : View(c) {
     var value = 0.5f
         set(v) {
@@ -153,8 +153,8 @@ private class Slider(c: Context, private val onValue: (Float) -> Unit) : View(c)
             invalidate()
         }
     private val d = resources.displayMetrics.density
-    private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF2C2C2C.toInt() }
-    private val fillP = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFB9B9B9.toInt() }
+    private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFDEDEDE.toInt() }
+    private val fillP = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF4D4D4D.toInt() }
     private val iconP = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val sun: Path? = Qp.parse(Qp.SUN)
     private val clip = Path()
@@ -176,7 +176,7 @@ private class Slider(c: Context, private val onValue: (Float) -> Unit) : View(c)
         canvas.save()
         canvas.translate(16f * d, (h - size) / 2f)
         canvas.scale(s, s)
-        iconP.color = if (w * value > 40f * d) 0xFF2A2A2A.toInt() else 0xFFCFCFCF.toInt()
+        iconP.color = if (w * value > 40f * d) Color.WHITE else 0xFF666666.toInt()
         canvas.drawPath(p, iconP)
         canvas.restore()
     }
@@ -345,7 +345,7 @@ private class IconRow(c: Context) : View(c) {
         c.save()
         c.translate(x, cy - size / 2f)
         c.scale(s, s)
-        fill.color = Color.WHITE
+        fill.color = 0xFF222222.toInt()
         c.drawPath(p, fill)
         c.restore()
     }
@@ -356,7 +356,7 @@ private class IconRow(c: Context) : View(c) {
         for (i in 0 until 4) {
             val bh = (4 + i * 3) * d
             val left = x + i * (bw + g)
-            fill.color = if (i < cell) Color.WHITE else 0x55FFFFFF
+            fill.color = if (i < cell) 0xFF222222.toInt() else 0x33000000
             c.drawRoundRect(RectF(left, cy + 6.5f * d - bh, left + bw, cy + 6.5f * d), d, d, fill)
         }
     }
@@ -366,13 +366,13 @@ private class IconRow(c: Context) : View(c) {
         val bh = 15f * d
         val r = RectF(x, cy - bh / 2f, x + bw, cy + bh / 2f)
         val rad = bh * 0.34f
-        fill.color = 0x66FFFFFF
+        fill.color = 0xFFDADADA.toInt()
         c.drawRoundRect(r, rad, rad, fill)
         val col = when {
             charging -> 0xFF30D158.toInt()
             saver -> 0xFFFFD60A.toInt()
             battery <= 20 -> 0xFFFF453A.toInt()
-            else -> Color.WHITE
+            else -> 0xFFB5B5B5.toInt()
         }
         c.save()
         c.clipRect(x, r.top, x + bw * battery / 100f, r.bottom)
@@ -387,8 +387,9 @@ private class IconRow(c: Context) : View(c) {
 
 /**
  * Central de controle (configuracoes rapidas). Desce ao puxar a barra de status e tem os botoes
- * de rede, som, lanterna, captura de tela, brilho etc. O que o Android nao deixa um app ligar
- * sozinho (wifi, bluetooth, aviao...) abre a tela certa das configuracoes.
+ * de rede, som, lanterna, captura de tela, brilho etc. Wifi, dados, bluetooth, aviao, economia de
+ * bateria, modo escuro e localizacao ligam/desligam direto pelo Shizuku; sem ele, abrem a tela
+ * certa das configuracoes (segurar o botao sempre abre as configuracoes).
  */
 class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
     private val d = resources.displayMetrics.density
@@ -470,13 +471,13 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
 
         // cabecalho: relogio grande, data, engrenagem, operadora e icones
         clockText.textSize = 54f
-        clockText.setTextColor(Color.WHITE)
+        clockText.setTextColor(0xFF111111.toInt())
         clockText.typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
         clockText.includeFontPadding = false
         dateText.textSize = 14f
-        dateText.setTextColor(0xFFE6E6E6.toInt())
+        dateText.setTextColor(0xFF444444.toInt())
         carrierText.textSize = 14f
-        carrierText.setTextColor(0xFFE6E6E6.toInt())
+        carrierText.setTextColor(0xFF444444.toInt())
         carrierText.maxLines = 1
         carrierText.ellipsize = TextUtils.TruncateAt.END
 
@@ -513,7 +514,7 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
         val card = LinearLayout(svc)
         card.orientation = LinearLayout.VERTICAL
         card.background = GradientDrawable().also {
-            it.setColor(0xFF1E1E1E.toInt())
+            it.setColor(Color.WHITE)
             it.cornerRadius = dp(28).toFloat()
         }
         pager.pageW = cardW
@@ -530,7 +531,7 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
             val dot = View(svc)
             dot.background = GradientDrawable().also {
                 it.shape = GradientDrawable.OVAL
-                it.setColor(if (i == 0) Color.WHITE else 0x55FFFFFF)
+                it.setColor(if (i == 0) 0xFF222222.toInt() else 0x33000000)
             }
             dots.add(dot)
             dotRow.addView(
@@ -543,7 +544,7 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
         }
         pager.onPage = { p ->
             dots.forEachIndexed { i, v ->
-                (v.background as GradientDrawable).setColor(if (i == p) Color.WHITE else 0x55FFFFFF)
+                (v.background as GradientDrawable).setColor(if (i == p) 0xFF222222.toInt() else 0x33000000)
             }
         }
         card.addView(dotRow, LinearLayout.LayoutParams(match, dp(14)).also { it.topMargin = dp(6) })
@@ -555,15 +556,15 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
         q.text = "?"
         q.textSize = 10f
         q.gravity = Gravity.CENTER
-        q.setTextColor(0xFFB0B0B0.toInt())
+        q.setTextColor(0xFF666666.toInt())
         q.background = GradientDrawable().also {
             it.shape = GradientDrawable.OVAL
-            it.setColor(0xFF3A3A3A.toInt())
+            it.setColor(0xFFE0E0E0.toInt())
         }
         usageRow.addView(q, LinearLayout.LayoutParams(dp(18), dp(18)))
         for (t in listOf(usageToday, usageMonth)) {
             t.textSize = 11f
-            t.setTextColor(0xFF9A9A9A.toInt())
+            t.setTextColor(0xFF666666.toInt())
         }
         usageToday.text = "Today: --"
         usageMonth.text = "This month: --"
@@ -599,7 +600,7 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
         // barrinha embaixo
         val handle = View(svc)
         handle.background = GradientDrawable().also {
-            it.setColor(0x66FFFFFF)
+            it.setColor(0x44000000)
             it.cornerRadius = dp(2).toFloat()
         }
         sheet.addView(
@@ -635,10 +636,28 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
     private fun buildTiles(): List<List<Tile>> {
         val internet = { launch(*internetIntents()) }
         val page1 = listOf(
-            t("Mobile data", Qp.DATA, on = { mobileData() }, hold = internet, tap = internet),
+            t("Mobile data", Qp.DATA, on = { mobileData() }, hold = internet) {
+                sh("svc data " + (if (mobileData()) "disable" else "enable")) { internet() }
+            },
             Tile({ wifiLabel() }, Qp.WIFI, { wifiOn() }, { wifiTap() }, internet),
-            t("Bluetooth", Qp.BT, on = { btOn() }) { launch(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) },
-            t("Airplane mode", Qp.PLANE, on = { airplane() }) { launch(Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS)) },
+            t(
+                "Bluetooth", Qp.BT, on = { btOn() },
+                hold = { launch(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
+            ) {
+                val a = if (btOn()) "disable" else "enable"
+                sh("cmd bluetooth_manager $a || svc bluetooth $a") { launch(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
+            },
+            t(
+                "Airplane mode", Qp.PLANE, on = { airplane() },
+                hold = { launch(Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS)) }
+            ) {
+                val a = if (airplane()) "disable" else "enable"
+                val n = if (airplane()) 0 else 1
+                sh(
+                    "cmd connectivity airplane-mode $a || (settings put global airplane_mode_on $n; " +
+                        "am broadcast -a android.intent.action.AIRPLANE_MODE --ez state ${n == 1})"
+                ) { launch(Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS)) }
+            },
             t(
                 "Mute", Qp.BELL, on = { audio.ringerMode != AudioManager.RINGER_MODE_NORMAL },
                 hold = { launch(Intent(Settings.ACTION_SOUND_SETTINGS)) }
@@ -648,8 +667,22 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
                 closeNow()
                 ui.postDelayed({ svc.screenshot() }, 450)
             },
-            t("Battery saver", Qp.SAVER, on = { saverOn() }) { launch(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)) },
-            t("Dark mode", Qp.MOON, on = { darkOn() }) { launch(Intent(Settings.ACTION_DISPLAY_SETTINGS)) },
+            t(
+                "Battery saver", Qp.SAVER, on = { saverOn() },
+                hold = { launch(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)) }
+            ) {
+                sh("settings put global low_power " + (if (saverOn()) 0 else 1)) {
+                    launch(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS))
+                }
+            },
+            t(
+                "Dark mode", Qp.MOON, on = { darkOn() },
+                hold = { launch(Intent(Settings.ACTION_DISPLAY_SETTINGS)) }
+            ) {
+                sh("cmd uimode night " + (if (darkOn()) "no" else "yes")) {
+                    launch(Intent(Settings.ACTION_DISPLAY_SETTINGS))
+                }
+            },
             t(
                 "Lock orientation", Qp.ROTATE, on = { rotationLocked() },
                 hold = { launch(Intent(Settings.ACTION_DISPLAY_SETTINGS)) }
@@ -668,7 +701,16 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
             }
         )
         val page2 = listOf(
-            t("Location", Qp.LOC, on = { locationOn() }) { launch(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) },
+            t(
+                "Location", Qp.LOC, on = { locationOn() },
+                hold = { launch(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
+            ) {
+                val on = locationOn()
+                sh(
+                    "cmd location set-location-enabled " + (if (on) "false" else "true") +
+                        " || settings put secure location_mode " + (if (on) 0 else 3)
+                ) { launch(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
+            },
             t("Do not disturb", Qp.DND, on = { dndOn() }) { toggleDnd() },
             t("Cast", Qp.CAST) { launch(Intent(Settings.ACTION_CAST_SETTINGS)) },
             t("Alarm", Qp.ALARM) { launch(Intent(AlarmClock.ACTION_SHOW_ALARMS)) }
@@ -707,7 +749,7 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
             gravity = Gravity.CENTER_HORIZONTAL
             addView(circle, LinearLayout.LayoutParams(dp(46), dp(46)))
             label.textSize = 11f
-            label.setTextColor(0xFFC8C8C8.toInt())
+            label.setTextColor(0xFF2B2B2B.toInt())
             label.maxLines = 1
             label.ellipsize = TextUtils.TruncateAt.END
             label.gravity = Gravity.CENTER
@@ -732,6 +774,25 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
     }
 
     // ---------- estado e acoes ----------
+
+    /**
+     * Roda um comando de shell pelo Shizuku (liga/desliga sem abrir configuracoes).
+     * Sem o Shizuku ligado, cai no jeito antigo (fallback).
+     */
+    private fun sh(cmd: String, fallback: () -> Unit) {
+        when {
+            SysToggle.ready() -> Thread {
+                SysToggle.run(cmd)
+                ui.postDelayed({ refresh() }, 600)
+                ui.postDelayed({ refresh() }, 1800)
+            }.start()
+            SysToggle.running() -> {
+                SysToggle.ask()
+                toast("Autorize o Shizuku para o One UI e toque de novo")
+            }
+            else -> fallback()
+        }
+    }
 
     private fun internetIntents(): Array<Intent> =
         if (Build.VERSION.SDK_INT >= 29)
@@ -764,8 +825,10 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
         return "Wi-Fi"
     }
 
+    private fun wifiTap() = sh("svc wifi " + (if (wifiOn()) "disable" else "enable")) { wifiTapOld() }
+
     @Suppress("DEPRECATION")
-    private fun wifiTap() {
+    private fun wifiTapOld() {
         if (Build.VERSION.SDK_INT < 29) {
             try {
                 val wm = svc.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
@@ -1027,7 +1090,7 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
     private fun applyProgress(p: Float) {
         progress = p
         sheet.translationY = -(1f - p) * sheetHeight
-        setBackgroundColor(Color.argb((p * 235f).toInt(), 0, 0, 0))
+        setBackgroundColor(Color.argb((p * 245f).toInt(), 242, 242, 242))
     }
 
     fun stopAnimation() {
