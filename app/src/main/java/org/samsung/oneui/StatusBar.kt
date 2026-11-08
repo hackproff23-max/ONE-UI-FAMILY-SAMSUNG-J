@@ -10,11 +10,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
-import android.graphics.Shader
 import android.graphics.Typeface
 import android.location.LocationManager
 import android.media.AudioManager
@@ -34,6 +32,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.Toast
 
@@ -54,10 +53,10 @@ object StatusBar {
         return maxOf(heightPx(ctx), sys)
     }
 
-        fun install(a: Activity) {
+    fun install(a: Activity) {
         val decor = a.window.decorView as ViewGroup
         if (decor.findViewWithTag<View>(TAG) != null) return
-        hideSystem(a)
+        keepSystemHidden(a)
         if (BarService.running) return // a barra global (servico) ja desenha por cima de tudo
         askAccessibility(a)
         val v = Bar(a, a)
@@ -66,8 +65,30 @@ object StatusBar {
         askNotificationAccess(a)
     }
 
+    /**
+     * Esconde a barra do sistema e a mantem escondida: o launcher tem a barra transparente, entao
+     * qualquer pedaco da barra do sistema que voltasse apareceria por baixo dela (os "fantasmas").
+     */
+    @Suppress("DEPRECATION")
+    fun keepSystemHidden(a: Activity) {
+        hideSystem(a)
+        val decor = a.window.decorView
+        // volta a esconder sempre que a janela recupera o foco (dialogos, menus, outros apps)
+        decor.viewTreeObserver.addOnWindowFocusChangeListener { hasFocus ->
+            if (hasFocus) hideSystem(a)
+        }
+        if (Build.VERSION.SDK_INT < 30) {
+            // e sempre que o sistema devolver a barra (deslizar do topo, teclado, etc.)
+            decor.setOnSystemUiVisibilityChangeListener { vis ->
+                if ((vis and View.SYSTEM_UI_FLAG_FULLSCREEN) == 0) decor.post { hideSystem(a) }
+            }
+        }
+    }
+
     @Suppress("DEPRECATION")
     fun hideSystem(a: Activity) {
+        // flag de janela: nao e zerada quando o foco muda, ao contrario das flags de UI
+        a.window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         if (Build.VERSION.SDK_INT >= 30) {
             a.window.insetsController?.let {
                 it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -115,7 +136,7 @@ object StatusBar {
     private class Item(val w: Float, val draw: (Canvas, Float, Float) -> Unit)
 
     class Bar(ctx: Context, private val a: Activity?) : View(ctx) {
-        /** Fundo preto (nos outros apps) ou transparente com degrade (no launcher). */
+        /** Fundo preto (nos outros apps, para cobrir a barra do sistema) ou totalmente transparente (no launcher). */
         var solid = false
             set(v) {
                 field = v
@@ -146,7 +167,6 @@ object StatusBar {
             textAlign = Paint.Align.CENTER
             textSize = 10.5f * resources.displayMetrics.scaledDensity
         }
-        private val shade = Paint()
 
         private val WHITE = Color.WHITE
         private val DIM = 0x55FFFFFF
@@ -300,13 +320,9 @@ object StatusBar {
             val padR = 16 * d
             val gap = 7 * d
 
-            // leve degrade no topo para a barra ler bem em qualquer papel de parede
-            if (solid) {
-                canvas.drawColor(0xFF000000.toInt())
-            } else {
-                shade.shader = LinearGradient(0f, 0f, 0f, h, 0x55000000, 0x00000000, Shader.TileMode.CLAMP)
-                canvas.drawRect(0f, 0f, w, h, shade)
-            }
+            // nos outros apps o preto cobre a barra do sistema; no launcher o fundo e transparente
+            // (a barra do sistema fica escondida, entao nada aparece por baixo)
+            if (solid) canvas.drawColor(0xFF000000.toInt())
 
             // direita: tudo que esta ligado
             val items = rightItems()
