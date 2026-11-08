@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <!-- barra de status propria: estado da rede e do wifi -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- central de controle: brilho e bloqueio de rotacao (o usuario libera em Configuracoes) -->
+    <uses-permission
+        android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+    <!-- central de controle: uso de dados de hoje e do mes (acesso especial de uso) -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
 
     <queries>
         <intent>
@@ -27,6 +36,8 @@
         <intent>
             <action android:name="com.gau.go.launcherex.theme" />
         </intent>
+        <!-- botao Device controls da central de controle -->
+        <package android:name="com.google.android.apps.chromecast.app" />
     </queries>
 
     <application
