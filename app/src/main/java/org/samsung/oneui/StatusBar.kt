@@ -47,11 +47,20 @@ object StatusBar {
 
     fun heightPx(ctx: Context): Int = (28 * ctx.resources.displayMetrics.density + 0.5f).toInt()
 
-    fun install(a: Activity) {
+    /** A janela global precisa cobrir a barra do sistema inteira. */
+    fun overlayHeightPx(ctx: Context): Int {
+        val id = ctx.resources.getIdentifier("status_bar_height", "dimen", "android")
+        val sys = if (id > 0) ctx.resources.getDimensionPixelSize(id) else 0
+        return maxOf(heightPx(ctx), sys)
+    }
+
+        fun install(a: Activity) {
         val decor = a.window.decorView as ViewGroup
         if (decor.findViewWithTag<View>(TAG) != null) return
         hideSystem(a)
-        val v = Bar(a)
+        if (BarService.running) return // a barra global (servico) ja desenha por cima de tudo
+        askAccessibility(a)
+        val v = Bar(a, a)
         v.tag = TAG
         decor.addView(v, FrameLayout.LayoutParams(-1, heightPx(a), Gravity.TOP))
         askNotificationAccess(a)
@@ -85,9 +94,40 @@ object StatusBar {
         }
     }
 
+    /** Para a barra valer em todos os apps e bloquear a do sistema, liga-se o servico de acessibilidade. */
+    private fun askAccessibility(a: Activity) {
+        val enabled = Settings.Secure.getString(a.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
+        if (enabled.contains(a.packageName)) return
+        val sp = a.getSharedPreferences("oneui_launcher", Context.MODE_PRIVATE)
+        if (sp.getBoolean("asked_a11y", false)) return
+        sp.edit().putBoolean("asked_a11y", true).apply()
+        Toast.makeText(
+            a,
+            "Ative este app em Acessibilidade para a barra valer em todos os apps e bloquear a do sistema",
+            Toast.LENGTH_LONG
+        ).show()
+        try {
+            a.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        } catch (e: Exception) {
+        }
+    }
+
     private class Item(val w: Float, val draw: (Canvas, Float, Float) -> Unit)
 
-    private class Bar(private val a: Activity) : View(a) {
+    class Bar(ctx: Context, private val a: Activity?) : View(ctx) {
+        /** Fundo preto (nos outros apps) ou transparente com degrade (no launcher). */
+        var solid = false
+            set(v) {
+                field = v
+                invalidate()
+            }
+
+        /** Na janela global a barra segura o toque, para a do sistema nao abrir por baixo. */
+        var blockTouches = false
+
+        override fun onTouchEvent(event: android.view.MotionEvent?): Boolean =
+            blockTouches || super.onTouchEvent(event)
+
         private val d = resources.displayMetrics.density
         private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
         private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -192,7 +232,7 @@ object StatusBar {
 
         override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
             super.onWindowFocusChanged(hasWindowFocus)
-            if (hasWindowFocus) hideSystem(a)
+            if (hasWindowFocus && a != null) hideSystem(a)
         }
 
         @Suppress("DEPRECATION")
@@ -261,8 +301,12 @@ object StatusBar {
             val gap = 7 * d
 
             // leve degrade no topo para a barra ler bem em qualquer papel de parede
-            shade.shader = LinearGradient(0f, 0f, 0f, h, 0x55000000, 0x00000000, Shader.TileMode.CLAMP)
-            canvas.drawRect(0f, 0f, w, h, shade)
+            if (solid) {
+                canvas.drawColor(0xFF000000.toInt())
+            } else {
+                shade.shader = LinearGradient(0f, 0f, 0f, h, 0x55000000, 0x00000000, Shader.TileMode.CLAMP)
+                canvas.drawRect(0f, 0f, w, h, shade)
+            }
 
             // direita: tudo que esta ligado
             val items = rightItems()
