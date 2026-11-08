@@ -60,6 +60,7 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
         bindViews()
         setupClock()
+        ClockStyle.apply(this)
         setupLists()
         setupDrawer()
         setupInsets()
@@ -338,7 +339,7 @@ class MainActivity : Activity() {
                 HomeMenu.Item(HomeMenu.CONFIGS, "CONFIGS") { showClassicSettings() },
                 HomeMenu.Item(HomeMenu.PAGINA, "PÁGINA") { showGridTarget("home", "Tela inicial") },
                 HomeMenu.Item(HomeMenu.WIDGET, "WIDGET") { toast("Widgets: em breve") },
-                HomeMenu.Item(HomeMenu.RELOGIO, "RELÓGIO") { toast("Relógio: em breve") },
+                HomeMenu.Item(HomeMenu.RELOGIO, "RELÓGIO") { ClockSettings.show(this@MainActivity) },
                 HomeMenu.Item(HomeMenu.DOCK, "DOCK") { toast("Dock: em breve") }
             )
         )
