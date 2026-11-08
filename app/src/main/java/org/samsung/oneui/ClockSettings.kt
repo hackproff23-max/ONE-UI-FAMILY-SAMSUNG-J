@@ -82,15 +82,6 @@ class ClockSettings private constructor(private val a: Activity) {
         "Contorno: cor (${hex(cp.strokeColor)})" to { colorDialog("Cor do contorno", cp.strokeColor) { cp.strokeColor = it } },
         "Sombra: ${onOff(cp.shadow)}" to { cp.shadow = !cp.shadow; refresh() },
 
-        "Perspectiva: giro X (${cp.rotX}°)" to { slider("Giro X (para frente / para trás)", -80, 80, cp.rotX, "°") { cp.rotX = it } },
-        "Perspectiva: giro Y (${cp.rotY}°)" to { slider("Giro Y (para os lados)", -80, 80, cp.rotY, "°") { cp.rotY = it } },
-        "Rotação (${cp.rotZ}°)" to { slider("Rotação", -180, 180, cp.rotZ, "°") { cp.rotZ = it } },
-        "Profundidade da perspectiva (${cp.depth})" to {
-            slider("Profundidade (menor = perspectiva mais forte)", 1, 100, cp.depth, "") { cp.depth = it }
-        },
-        "Escala (${cp.scale}%)" to { slider("Escala", 30, 250, cp.scale, "%") { cp.scale = it } },
-        "Posição horizontal (${cp.posX})" to { slider("Posição horizontal", -300, 300, cp.posX, "") { cp.posX = it } },
-        "Posição vertical (${cp.posY})" to { slider("Posição vertical", -300, 300, cp.posY, "") { cp.posY = it } },
         "Opacidade (${cp.opacity}%)" to { slider("Opacidade", 10, 100, cp.opacity, "%") { cp.opacity = it } },
         "Alinhamento: ${ALIGNS[cp.align.coerceIn(0, 2)]}" to {
             choose("Alinhamento", ALIGNS, cp.align.coerceIn(0, 2)) { cp.align = it }
@@ -121,8 +112,8 @@ class ClockSettings private constructor(private val a: Activity) {
         val e = entries()
         labels.addAll(e.map { it.first })
         actions = e.map { it.second }
-        val dlg = AlertDialog.Builder(a)
-            .setTitle("Relógio")
+        val dlg = Dark.builder(a)
+            .setTitle("Estilo do relógio")
             .setAdapter(adapter, null)
             .setPositiveButton("Fechar", null)
             .create()
@@ -171,7 +162,7 @@ class ClockSettings private constructor(private val a: Activity) {
         })
         box.addView(value)
         box.addView(bar)
-        val dlg = AlertDialog.Builder(a)
+        val dlg = Dark.builder(a)
             .setTitle(title)
             .setView(box)
             .setPositiveButton(android.R.string.ok) { _, _ -> refresh() }
@@ -188,7 +179,7 @@ class ClockSettings private constructor(private val a: Activity) {
     }
 
     private fun choose(title: String, names: List<String>, selected: Int, set: (Int) -> Unit) {
-        AlertDialog.Builder(a)
+        Dark.builder(a)
             .setTitle(title)
             .setSingleChoiceItems(names.toTypedArray(), selected) { dialog, which ->
                 set(which)
@@ -270,7 +261,7 @@ class ClockSettings private constructor(private val a: Activity) {
         scroll.addView(row)
         box.addView(scroll)
 
-        val dlg = AlertDialog.Builder(a)
+        val dlg = Dark.builder(a)
             .setTitle(title)
             .setView(box)
             .setPositiveButton(android.R.string.ok) { _, _ -> refresh() }

@@ -111,6 +111,15 @@ class ClockPrefs(context: Context) {
         get() = int("date_format", 0)
         set(v) = put("date_format", v)
 
+    /** Deslocamento (dp) dos 4 cantos do relogio: perspectiva, posicao, tamanho e giro livres. */
+    fun quad(): FloatArray = FloatArray(8) { sp.getFloat("q$it", 0f) }
+
+    fun setQuad(v: FloatArray) {
+        val e = sp.edit()
+        for (i in 0 until 8) e.putFloat("q$i", v[i])
+        e.apply()
+    }
+
     fun reset() {
         sp.edit().clear().apply()
     }

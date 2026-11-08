@@ -13,7 +13,11 @@ import java.util.Locale
 /** Aplica as preferencias do relogio nas views da tela inicial. */
 object ClockStyle {
 
+    /** Deformacao em edicao (ainda nao confirmada); null = usa a salva. */
+    var liveQuad: FloatArray? = null
+
     fun apply(a: Activity) {
+        val frame = a.findViewById<PerspectiveFrame>(R.id.clockFrame) ?: return
         val box = a.findViewById<LinearLayout>(R.id.clockBox) ?: return
         val hour = a.findViewById<OutlineTextClock>(R.id.clock) ?: return
         val date = a.findViewById<OutlineTextClock>(R.id.date) ?: return
@@ -22,7 +26,7 @@ object ClockStyle {
 
         hour.visibility = if (cp.showClock) View.VISIBLE else View.GONE
         date.visibility = if (cp.showDate) View.VISIBLE else View.GONE
-        box.visibility = if (cp.showClock || cp.showDate) View.VISIBLE else View.GONE
+        frame.visibility = if (cp.showClock || cp.showDate) View.VISIBLE else View.GONE
 
         // texto
         val face = Typeface.create(cp.font, cp.fontStyle)
@@ -58,32 +62,25 @@ object ClockStyle {
         date.format12Hour = pattern
         date.format24Hour = pattern
 
-        // alinhamento do bloco
+        // alinhamento: do texto dentro do bloco e do bloco na tela
         val g = when (cp.align) {
             1 -> Gravity.CENTER_HORIZONTAL
             2 -> Gravity.END
             else -> Gravity.START
         }
         box.gravity = g
-        val lp = box.layoutParams
+        val lp = frame.layoutParams
         if (lp is LinearLayout.LayoutParams && lp.gravity != g) {
             lp.gravity = g
-            box.layoutParams = lp
+            frame.layoutParams = lp
         }
-
-        // perspectiva e transformacao do bloco inteiro
-        box.cameraDistance = d * (100f + cp.depth * 60f)
-        box.rotationX = cp.rotX.toFloat()
-        box.rotationY = cp.rotY.toFloat()
-        box.rotation = cp.rotZ.toFloat()
-        box.scaleX = cp.scale / 100f
-        box.scaleY = cp.scale / 100f
-        box.translationX = cp.posX * d
-        box.translationY = cp.posY * d
         box.alpha = cp.opacity / 100f
 
-        // deixa o bloco girar/crescer sem ser cortado pelos pais
-        var p = box.parent
+        // perspectiva livre (editor): deslocamento dos 4 cantos
+        frame.setOffsets(liveQuad ?: cp.quad())
+
+        // deixa o relogio sair dos limites sem ser cortado pelos pais
+        var p = frame.parent
         var n = 0
         while (p is ViewGroup && n < 4) {
             p.clipChildren = false

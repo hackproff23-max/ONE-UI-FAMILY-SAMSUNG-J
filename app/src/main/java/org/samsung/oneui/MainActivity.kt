@@ -339,14 +339,14 @@ class MainActivity : Activity() {
                 HomeMenu.Item(HomeMenu.CONFIGS, "CONFIGS") { showClassicSettings() },
                 HomeMenu.Item(HomeMenu.PAGINA, "PÁGINA") { showGridTarget("home", "Tela inicial") },
                 HomeMenu.Item(HomeMenu.WIDGET, "WIDGET") { toast("Widgets: em breve") },
-                HomeMenu.Item(HomeMenu.RELOGIO, "RELÓGIO") { ClockSettings.show(this@MainActivity) },
+                HomeMenu.Item(HomeMenu.RELOGIO, "RELÓGIO") { ClockEditor.start(this@MainActivity) },
                 HomeMenu.Item(HomeMenu.DOCK, "DOCK") { toast("Dock: em breve") }
             )
         )
     }
 
     private fun showClassicSettings() {
-        AlertDialog.Builder(this)
+        Dark.builder(this)
             .setTitle("Opções")
             .setItems(arrayOf("Ícones", "Grade")) { _, which ->
                 if (which == 0) showIconSettings() else showGridSettings()
@@ -391,7 +391,7 @@ class MainActivity : Activity() {
         labels.add("Formato dos ícones sem tema: ${prefs.iconShape().label}")
         actions.add { chooseShape() }
 
-        AlertDialog.Builder(this)
+        Dark.builder(this)
             .setTitle("Ícones")
             .setItems(labels.toTypedArray()) { _, which -> actions[which]() }
             .setNegativeButton("Voltar") { _, _ -> showSettings() }
@@ -423,7 +423,7 @@ class MainActivity : Activity() {
         }
         box.addView(value)
         box.addView(bar)
-        AlertDialog.Builder(this)
+        Dark.builder(this)
             .setTitle("Tamanho dos ícones")
             .setView(box)
             .setPositiveButton(android.R.string.ok) { _, _ ->
@@ -459,7 +459,7 @@ class MainActivity : Activity() {
         }
         box.addView(value)
         box.addView(bar)
-        AlertDialog.Builder(this)
+        Dark.builder(this)
             .setTitle("Borrar bordas da forma (0 a 100)")
             .setView(box)
             .setPositiveButton(android.R.string.ok) { _, _ ->
@@ -473,7 +473,7 @@ class MainActivity : Activity() {
     // ----- Grade -----
 
     private fun showGridSettings() {
-        AlertDialog.Builder(this)
+        Dark.builder(this)
             .setTitle("Grade")
             .setItems(arrayOf("Gaveta de apps", "Tela inicial")) { _, which ->
                 if (which == 0) showGridTarget("drawer", "Gaveta de apps")
@@ -492,7 +492,7 @@ class MainActivity : Activity() {
             "Colunas: ${numLabel(g.cols)}",
             "Linhas: ${numLabel(g.rows)}"
         )
-        AlertDialog.Builder(this)
+        Dark.builder(this)
             .setTitle(title)
             .setItems(labels) { _, which ->
                 when (which) {
@@ -508,7 +508,7 @@ class MainActivity : Activity() {
     private fun chooseGridStyle(target: String, title: String) {
         val styles = GridStyle.values()
         val names = styles.map { it.label }.toTypedArray()
-        AlertDialog.Builder(this)
+        Dark.builder(this)
             .setTitle("Estilo")
             .setSingleChoiceItems(names, prefs.grid(target).style.ordinal) { dialog, which ->
                 prefs.setGridStyle(target, styles[which])
@@ -522,7 +522,7 @@ class MainActivity : Activity() {
 
     private fun chooseGridNumber(target: String, title: String, what: String, current: Int, save: (Int) -> Unit) {
         val names = Array(16) { if (it == 0) "Automático" else it.toString() }
-        AlertDialog.Builder(this)
+        Dark.builder(this)
             .setTitle(what)
             .setSingleChoiceItems(names, current.coerceIn(0, 15)) { dialog, which ->
                 save(which)
@@ -555,7 +555,7 @@ class MainActivity : Activity() {
     private fun chooseIconPack() {
         val packs = IconPackLoader.list(this)
         if (packs.isEmpty()) {
-            AlertDialog.Builder(this)
+            Dark.builder(this)
                 .setTitle("Pacote de ícones")
                 .setMessage("Nenhum pacote de ícones instalado. Instale um pacote compatível (formato ADW, Nova ou Apex) e volte aqui.")
                 .setPositiveButton(android.R.string.ok, null)
@@ -565,7 +565,7 @@ class MainActivity : Activity() {
         val names = (listOf("Padrão do sistema") + packs.map { it.label }).toTypedArray()
         val current = prefs.iconPack()
         val selected = packs.indexOfFirst { it.packageName == current } + 1 // -1 vira 0 (sistema)
-        AlertDialog.Builder(this)
+        Dark.builder(this)
             .setTitle("Pacote de ícones")
             .setSingleChoiceItems(names, selected) { dialog, which ->
                 prefs.setIconPack(if (which == 0) "" else packs[which - 1].packageName)
@@ -579,7 +579,7 @@ class MainActivity : Activity() {
     private fun chooseShape() {
         val shapes = IconShape.values()
         val names = shapes.map { it.label }.toTypedArray()
-        AlertDialog.Builder(this)
+        Dark.builder(this)
             .setTitle("Formato dos ícones sem tema")
             .setSingleChoiceItems(names, prefs.iconShape().ordinal) { dialog, which ->
                 prefs.setIconShape(shapes[which])
