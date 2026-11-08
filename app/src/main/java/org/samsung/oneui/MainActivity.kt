@@ -61,6 +61,7 @@ class MainActivity : Activity() {
         bindViews()
         setupClock()
         ClockStyle.apply(this)
+        StatusBar.install(this)
         setupLists()
         setupDrawer()
         setupInsets()
@@ -210,8 +211,8 @@ class MainActivity : Activity() {
     private fun setupInsets() {
         root.setOnApplyWindowInsetsListener { _, insets ->
             val i = readInsets(insets)
-            home.setPadding(0, i[0], 0, i[1])
-            drawer.setPadding(0, i[0], 0, i[2])
+            home.setPadding(0, StatusBar.heightPx(this), 0, i[1])
+            drawer.setPadding(0, StatusBar.heightPx(this), 0, i[2])
             insets
         }
         root.requestApplyInsets()

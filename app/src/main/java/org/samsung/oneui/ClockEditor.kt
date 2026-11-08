@@ -10,8 +10,10 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -51,6 +53,7 @@ object ClockEditor {
         private lateinit var edit: EditView
         private lateinit var btnTransform: TextView
         private lateinit var btnPersp: TextView
+        private lateinit var menu: LinearLayout
 
         fun dp(v: Float): Float = v * d
         fun dpi(v: Int): Int = (v * d + 0.5f).toInt()
@@ -66,10 +69,29 @@ object ClockEditor {
             holder.tag = TAG
             edit = EditView(a)
             holder.addView(edit, FrameLayout.LayoutParams(-1, -1))
-            holder.addView(topBar(), FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
-            holder.addView(bottomBar(), FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+            val save = BarIcon(a, BarIcon.CHECK, 0xFF6FA8FF.toInt())
+            save.setOnClickListener { confirm() }
+            val sp = FrameLayout.LayoutParams(dpi(60), dpi(60), Gravity.TOP or Gravity.END)
+            sp.topMargin = StatusBar.heightPx(a) + dpi(6)
+            sp.rightMargin = dpi(8)
+            holder.addView(save, sp)
+            menu = menuBar()
+            menu.visibility = View.GONE
+            holder.addView(menu, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+            // voltar descarta a edicao
+            holder.isFocusableInTouchMode = true
+            holder.setOnKeyListener { _, keyCode, ev ->
+                if (keyCode == KeyEvent.KEYCODE_BACK) {
+                    if (ev.action == KeyEvent.ACTION_UP) cancel()
+                    true
+                } else {
+                    false
+                }
+            }
             decor.addView(holder, ViewGroup.LayoutParams(-1, -1))
+            holder.requestFocus()
             setMode(false)
+            Toast.makeText(a, "Segure o relógio para abrir o menu. Toque em ✓ para salvar.", Toast.LENGTH_LONG).show()
         }
 
         private fun close() {
@@ -106,7 +128,7 @@ object ClockEditor {
         // ---------- barras (estilo escuro do editor de fotos) ----------
 
         private fun pillBg(selected: Boolean): GradientDrawable = GradientDrawable().apply {
-            setColor(0xFF2A2A2A.toInt())
+            setColor(0xE62A2A2A.toInt())
             cornerRadius = dp(6f)
             setStroke(dpi(1), if (selected) 0xFF4F8DFF.toInt() else 0xFF707070.toInt())
         }
@@ -123,32 +145,21 @@ object ClockEditor {
             return t
         }
 
-        private fun topBar(): View {
-            val bar = LinearLayout(a)
-            bar.orientation = LinearLayout.HORIZONTAL
-            bar.gravity = Gravity.CENTER_VERTICAL
-            bar.setBackgroundColor(0xFF1A1A1A.toInt())
-            bar.setPadding(dpi(4), sysDimen("status_bar_height"), dpi(4), 0)
-            val size = dpi(52)
-            bar.addView(BarIcon(a, BarIcon.BACK, Color.WHITE).also { it.setOnClickListener { cancel() } }, LinearLayout.LayoutParams(size, size))
-            bar.addView(View(a), LinearLayout.LayoutParams(0, 1, 1f))
-            bar.addView(BarIcon(a, BarIcon.CHECK, 0xFF6FA8FF.toInt()).also { it.setOnClickListener { confirm() } }, LinearLayout.LayoutParams(size, size))
-            bar.addView(BarIcon(a, BarIcon.DOTS, Color.WHITE).also { it.setOnClickListener { ClockSettings.show(a) } }, LinearLayout.LayoutParams(size, size))
-            return bar
+        fun toggleMenu() {
+            menu.visibility = if (menu.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
 
-        private fun bottomBar(): View {
+        private fun menuBar(): LinearLayout {
             val bar = LinearLayout(a)
             bar.orientation = LinearLayout.HORIZONTAL
-            bar.setBackgroundColor(0xFF101010.toInt())
-            bar.setPadding(dpi(4), dpi(4), dpi(4), dpi(4) + sysDimen("navigation_bar_height"))
+            bar.setPadding(dpi(8), dpi(4), dpi(8), dpi(14) + sysDimen("navigation_bar_height"))
             btnTransform = pill("Transformar") { setMode(false) }
             btnPersp = pill("Perspectiva") { setMode(true) }
             val style = pill("Estilo") { ClockSettings.show(a) }
             val reset = pill("Resetar") { reset() }
             for (b in listOf(btnTransform, btnPersp, style, reset)) {
                 val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                lp.setMargins(dpi(2), 0, dpi(2), 0)
+                lp.setMargins(dpi(3), 0, dpi(3), 0)
                 bar.addView(b, lp)
             }
             return bar
@@ -185,6 +196,15 @@ object ClockEditor {
             private var sx = 0f
             private var sy = 0f
             private var startQ = FloatArray(8)
+            private var moved = false
+            private val slop = ViewConfiguration.get(ctx).scaledTouchSlop
+            private val longPress = Runnable {
+                if (!moved && mode == MOVE) {
+                    mode = NONE
+                    performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                    toggleMenu()
+                }
+            }
 
             private fun base(): FloatArray {
                 val loc = IntArray(2)
@@ -289,6 +309,8 @@ object ClockEditor {
                         startQ = quad()
                         sx = x
                         sy = y
+                        moved = false
+                        removeCallbacks(longPress)
                         val rh = rotHandle(startQ)
                         mode = NONE
                         if (hypot(x - rh[0], y - rh[1]) < dp(34f)) {
@@ -308,6 +330,7 @@ object ClockEditor {
                                 corner = best
                             } else if (inside(startQ, x, y)) {
                                 mode = MOVE
+                                postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
                             }
                         }
                     }
@@ -315,8 +338,12 @@ object ClockEditor {
                         val dx = x - sx
                         val dy = y - sy
                         val c0 = center(startQ)
+                        if (!moved && hypot(dx, dy) > slop) {
+                            moved = true
+                            removeCallbacks(longPress)
+                        }
                         when (mode) {
-                            MOVE -> commit(FloatArray(8) { startQ[it] + if (it % 2 == 0) dx else dy })
+                            MOVE -> if (moved) commit(FloatArray(8) { startQ[it] + if (it % 2 == 0) dx else dy })
                             CORNER -> if (perspective) {
                                 val q = startQ.copyOf()
                                 q[2 * corner] += dx
@@ -343,7 +370,10 @@ object ClockEditor {
                             else -> {}
                         }
                     }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> mode = NONE
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        removeCallbacks(longPress)
+                        mode = NONE
+                    }
                 }
                 return true // consome tudo: nada embaixo reage durante a edicao
             }
@@ -368,7 +398,6 @@ object ClockEditor {
         init {
             isClickable = true
             isFocusable = true
-            setBackgroundResource(android.R.drawable.list_selector_background)
         }
 
         override fun onDraw(canvas: Canvas) {
@@ -385,11 +414,15 @@ object ClockEditor {
                 }
                 CHECK -> {
                     p.style = Paint.Style.STROKE
-                    p.strokeWidth = 3.2f * u * 2f
                     val path = Path()
-                    path.moveTo(12 * u, h / 2)
-                    path.lineTo(22 * u, h / 2 + 10 * u)
-                    path.lineTo(40 * u, h / 2 - 10 * u)
+                    path.moveTo(11 * u, h / 2)
+                    path.lineTo(21 * u, h / 2 + 11 * u)
+                    path.lineTo(42 * u, h / 2 - 11 * u)
+                    p.color = 0x99000000.toInt()
+                    p.strokeWidth = 10 * u
+                    canvas.drawPath(path, p)
+                    p.color = color
+                    p.strokeWidth = 6 * u
                     canvas.drawPath(path, p)
                 }
                 else -> {
