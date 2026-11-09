@@ -99,11 +99,14 @@ class NotifPage(ctx: Context, private val onOpen: () -> Unit) : LinearLayout(ctx
         row.gravity = Gravity.CENTER_VERTICAL
         row.setPadding(0, dp(7), 0, dp(7))
 
-        // icone: silhueta do app sobre um circulo colorido (ou o icone do app)
+        // logo do app com o tema e o vidro do launcher (ou, sem ele, silhueta sobre um circulo colorido)
         val iconBox = FrameLayout(context)
-        val small = copyOf(it.smallIcon)
         val img = ImageView(context)
-        if (small != null) {
+        val logo = copyOf(it.logo)
+        val small = copyOf(it.smallIcon)
+        if (logo != null) {
+            img.setImageDrawable(logo)
+        } else if (small != null) {
             small.setTint(Color.WHITE)
             img.setImageDrawable(small)
             val pad = dp(8)
@@ -112,11 +115,9 @@ class NotifPage(ctx: Context, private val onOpen: () -> Unit) : LinearLayout(ctx
                 g.shape = GradientDrawable.OVAL
                 g.setColor(if (it.color != 0) it.color else 0xFF8A8F98.toInt())
             }
-        } else {
-            img.setImageDrawable(copyOf(it.appIcon))
         }
         iconBox.addView(img, FrameLayout.LayoutParams(-1, -1))
-        row.addView(iconBox, LayoutParams(dp(36), dp(36)))
+        row.addView(iconBox, LayoutParams(dp(40), dp(40)))
 
         val col = LinearLayout(context)
         col.orientation = VERTICAL

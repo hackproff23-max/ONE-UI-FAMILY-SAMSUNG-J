@@ -530,7 +530,7 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
         val dotRow = LinearLayout(svc)
         dotRow.orientation = LinearLayout.HORIZONTAL
         dotRow.gravity = Gravity.CENTER
-        for (i in 0 until 3) {
+        for (i in 0 until 2) {
             val dot = View(svc)
             dot.background = GradientDrawable().also {
                 it.shape = GradientDrawable.OVAL
@@ -718,7 +718,8 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
             t("Cast", Qp.CAST) { launch(Intent(Settings.ACTION_CAST_SETTINGS)) },
             t("Alarm", Qp.ALARM) { launch(Intent(AlarmClock.ACTION_SHOW_ALARMS)) }
         )
-        return listOf(page1, page2)
+        val gone = setOf("Screenshot", "Dark mode", "Device controls", "Cast")
+        return listOf((page1 + page2).filter { it.label() !in gone })
     }
 
     private fun buildPage(tiles: List<Tile>): View {
