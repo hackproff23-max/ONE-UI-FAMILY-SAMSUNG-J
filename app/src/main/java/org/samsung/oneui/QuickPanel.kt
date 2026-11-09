@@ -415,6 +415,7 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
     private var anim: ValueAnimator? = null
     private var askedWrite = false
     private var usageOk = true
+    private var notifPage: NotifPage? = null
 
     /** 0 = fechado, 1 = totalmente aberto. */
     var progress = 0f
@@ -521,13 +522,15 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
         val strip = LinearLayout(svc)
         strip.orientation = LinearLayout.HORIZONTAL
         for (tiles in buildTiles()) strip.addView(buildPage(tiles), LinearLayout.LayoutParams(cardW, wrap))
+        notifPage = NotifPage(svc) { closeNow() }
+        strip.addView(notifPage, LinearLayout.LayoutParams(cardW, dp(262)))
         pager.addView(strip, FrameLayout.LayoutParams(wrap, wrap))
         card.addView(pager, LinearLayout.LayoutParams(match, wrap))
 
         val dotRow = LinearLayout(svc)
         dotRow.orientation = LinearLayout.HORIZONTAL
         dotRow.gravity = Gravity.CENTER
-        for (i in 0 until 2) {
+        for (i in 0 until 3) {
             val dot = View(svc)
             dot.background = GradientDrawable().also {
                 it.shape = GradientDrawable.OVAL
@@ -1166,7 +1169,7 @@ class QuickPanel(private val svc: BarService) : FrameLayout(svc) {
             MotionEvent.ACTION_MOVE -> if (!dragging) {
                 val dy = ev.rawY - dY
                 val dx = ev.rawX - dX
-                if (dy < -touchSlop && abs(dy) > abs(dx) * 1.5f) {
+                if (dy < -touchSlop && abs(dy) > abs(dx) * 1.5f && notifPage?.wantsScroll(ev.rawX, ev.rawY) != true) {
                     beginClose(ev)
                     return true
                 }
