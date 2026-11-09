@@ -223,7 +223,7 @@ class MainActivity : Activity() {
     private fun loadApps(force: Boolean) {
         val cache: Map<String, AppInfo> = if (force) emptyMap() else byKey
         worker.execute {
-            val themer = IconThemer(this, prefs.iconPack(), prefs.iconShape(), prefs.fitIcons(), prefs.iconSize(), prefs.maskBlur())
+            val themer = IconThemer(this, prefs.iconPack(), prefs.iconShape(), prefs.fitIcons(), prefs.iconSize(), prefs.maskBlur(), Glass.on(this))
             val apps = AppRepository.load(this, cache, themer)
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
@@ -388,6 +388,12 @@ class MainActivity : Activity() {
 
         labels.add("Borrar bordas da forma: ${prefs.maskBlur()}")
         actions.add { chooseMaskBlur() }
+
+        labels.add("Efeito de vidro (iOS): ${if (Glass.on(this)) "ligado" else "desligado"}")
+        actions.add {
+            Glass.set(this, !Glass.on(this))
+            reapplyIcons()
+        }
 
         labels.add("Formato dos ícones sem tema: ${prefs.iconShape().label}")
         actions.add { chooseShape() }

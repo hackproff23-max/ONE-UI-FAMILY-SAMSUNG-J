@@ -11,6 +11,7 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
@@ -48,7 +49,8 @@ class IconThemer(
     private val shape: IconShape,
     private val fit: Boolean = true,
     private val iconDp: Int = 56,
-    private val maskBlur: Int = 0
+    private val maskBlur: Int = 0,
+    private val glass: Boolean = false
 ) {
     private class Art(val bmp: Bitmap, val adaptive: Boolean)
     private class Info(val coverage: Float, val luminance: Float, val fill: Float, val bounds: Rect?)
@@ -57,7 +59,7 @@ class IconThemer(
     private class Trimmed(val bmp: Bitmap, val tile: Boolean, val edge: Int, val lum: Float)
 
     private val res = context.resources
-    private val size = (iconDp * res.displayMetrics.density).toInt().coerceIn(96, 256)
+    private val size = (iconDp * res.displayMetrics.density * 1.5f).toInt().coerceIn(128, 288)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val dstIn = Paint(Paint.ANTI_ALIAS_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN) }
     private val dstOut = Paint(Paint.ANTI_ALIAS_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT) }
@@ -73,7 +75,7 @@ class IconThemer(
 
     /** Sem pacote, sem forma e sem ajuste, os icones ficam como o sistema entrega. */
     private val active: Boolean by lazy {
-        pack != null || customMask != null || fit ||
+        pack != null || customMask != null || fit || glass ||
             (shape != IconShape.AUTO && shape != IconShape.ORIGINAL)
     }
 
@@ -95,6 +97,94 @@ class IconThemer(
             bmp
         }
         blurMask(base)
+    }
+
+    // ---------- efeito de vidro (estilo iOS) ----------
+
+    private fun finish(bmp: Bitmap): Bitmap = if (glass) glassify(bmp) else bmp
+
+    private fun blurAlpha(a: IntArray, n: Int, r: Int): IntArray {
+        var cur = a
+        repeat(2) {
+            cur = blurPass(cur, n, r, true)
+            cur = blurPass(cur, n, r, false)
+        }
+        return cur
+    }
+
+    /**
+     * Deixa o icone com cara de vidro: sombra suave, brilho curvo no topo, luz nas bordas,
+     * reflexo embaixo e um leve esbranquicado, tudo so onde o icone existe.
+     */
+    private fun glassify(src: Bitmap): Bitmap {
+        val n = src.width
+        val nf = n.toFloat()
+        // 1) corpo um pouco menor, para sobrar espaco para a sombra
+        val body = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
+        val bc = Canvas(body)
+        val inset = nf * 0.035f
+        bc.drawBitmap(src, null, RectF(inset, inset * 0.6f, nf - inset, nf - inset * 1.4f), paint)
+
+        val px = IntArray(n * n)
+        body.getPixels(px, 0, n, 0, 0, n, n)
+        val alpha = IntArray(n * n) { px[it] ushr 24 }
+
+        // 2) camadas de vidro (SRC_ATOP: so desenham onde ja tem icone)
+        val atop = Paint(Paint.ANTI_ALIAS_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_ATOP) }
+        atop.color = 0x1EFFFFFF
+        bc.drawRect(0f, 0f, nf, nf, atop) // veu leitoso
+
+        // escurece de leve o meio de baixo, para dar volume
+        atop.shader = android.graphics.LinearGradient(
+            0f, nf * 0.45f, 0f, nf, 0x00000000, 0x24000000, Shader.TileMode.CLAMP
+        )
+        bc.drawRect(0f, 0f, nf, nf, atop)
+
+        // brilho curvo no topo
+        atop.shader = android.graphics.LinearGradient(
+            0f, 0f, 0f, nf * 0.5f, 0xB0FFFFFF.toInt(), 0x10FFFFFF, Shader.TileMode.CLAMP
+        )
+        bc.drawOval(RectF(-nf * 0.18f, -nf * 0.62f, nf * 1.18f, nf * 0.50f), atop)
+
+        // reflexo suave embaixo
+        atop.shader = android.graphics.LinearGradient(
+            0f, nf * 0.78f, 0f, nf, 0x00FFFFFF, 0x3CFFFFFF, Shader.TileMode.CLAMP
+        )
+        bc.drawRect(0f, nf * 0.78f, nf, nf, atop)
+        atop.shader = null
+
+        // luz de borda: o que sobra do icone menos o icone borrado
+        val r = (nf * 0.014f).toInt().coerceAtLeast(1)
+        val soft = blurAlpha(alpha, n, r)
+        val rim = IntArray(n * n)
+        for (y in 0 until n) {
+            val k = 0.95f - 0.5f * (y / nf) // mais forte em cima
+            for (x in 0 until n) {
+                val i = y * n + x
+                val e = (alpha[i] - soft[i]).coerceAtLeast(0)
+                val v = (e * 3.2f * k).toInt().coerceAtMost(235)
+                rim[i] = (v shl 24) or 0x00FFFFFF
+            }
+        }
+        val rimBmp = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
+        rimBmp.setPixels(rim, 0, n, 0, 0, n, n)
+        bc.drawBitmap(rimBmp, 0f, 0f, atop)
+        rimBmp.recycle()
+
+        // 3) sombra embaixo do corpo
+        val sr = (nf * 0.025f).toInt().coerceAtLeast(2)
+        val sh = blurAlpha(alpha, n, sr)
+        val shadowPx = IntArray(n * n) { ((sh[it] * 0.34f).toInt().coerceAtMost(255) shl 24) }
+        val shadow = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
+        shadow.setPixels(shadowPx, 0, n, 0, 0, n, n)
+
+        val out = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
+        val oc = Canvas(out)
+        oc.drawBitmap(shadow, 0f, nf * 0.022f, paint)
+        oc.drawBitmap(body, 0f, 0f, paint)
+        shadow.recycle()
+        body.recycle()
+        return out
     }
 
     /** Borra as bordas da forma (maskBlur 0..100): a transicao dentro/fora fica suave. */
@@ -140,7 +230,7 @@ class IconThemer(
         val p = pack
         if (p != null) {
             val themed = p.drawableFor(cn)
-            if (themed != null) return BitmapDrawable(res, render(themed, size))
+            if (themed != null) return BitmapDrawable(res, finish(render(themed, size)))
         }
         if (shape == IconShape.ORIGINAL) return original
         return try {
@@ -150,7 +240,7 @@ class IconThemer(
             } else {
                 composeWithShape(art)
             }
-            BitmapDrawable(res, out)
+            BitmapDrawable(res, finish(out))
         } catch (e: Exception) {
             original
         }
